@@ -7,8 +7,8 @@ BASE_PATH = "https://comic.naver.com/webtoon"
 days = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
 
 scraper = WebtoonScraper(BASE_PATH)
-for day in days:
-    scraper.scrape_links(day)
+scraper.set_driver_options()
+scraper.scrape_links()
 
 links = scraper.get_links()
 for i, link in enumerate(links):
