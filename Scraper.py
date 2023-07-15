@@ -19,40 +19,51 @@ import time
 import pandas as pd
 
 
+class ScrapeCheck(Exception):
+    pass
+
+
 class WebtoonScraper:
     def __init__(self, base_path):
         self.base_path = base_path
         self.links = []
-        self.is_scraped = [0] * 7
+        self.is_scraped = False
         self.raw_database = pd.DataFrame(columns=["Title", "Author", "Day",
                                                   "Likes", "Episodes", "description",
                                                   "Rank"])
-        options = webdriver.ChromeOptions()
-        # prevent webdriver from closing immediately
-        options.add_argument("headless")
-        options.add_argument('--window-size=1920,1080')
-        options.add_argument('--disable-blink-features=AutomationControlled')
-        options.add_experimental_option("detach", True)
+        self.options = webdriver.ChromeOptions()
 
-        self.driver = webdriver.Chrome(options=options)
+    # set the WebDriver options
+    def set_driver_options(self):
+        self.options.add_argument("headless")
+        self.options.add_argument('--window-size=1920,1080')
+        self.options.add_argument('--disable-blink-features=AutomationControlled')
+        # prevent webdriver from closing immediately
+        self.options.add_experimental_option("detach", True)
 
     # scrape webtoon links according to given day
-    def scrape_links(self, day):
-        DAY_PATH = self.base_path + "?tab=" + day
-        link = []
+    def scrape_links(self):
+        if self.is_scraped:
+            raise ScrapeCheck("You already scrape the links!")
+        else:
+            days = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
 
-        driver = self.driver
-        WebDriverWait(driver, timeout=200)      # Prevent session exception
-        driver.get(DAY_PATH)
-        # Title area class name
-        content = driver.find_element(By.ID, "content")
-        title_info = content.find_elements(By.CLASS_NAME, "ContentTitle__title_area--x24vt")
+            for day in days:
+                print("-"*32)
+                print(f"|||||  processing {day}...  |||||")
+                DAY_PATH = self.base_path + "?tab=" + day
+                link = []
 
-        for e in title_info:
-            link.append(e.get_attribute("href"))
+                driver = webdriver.Chrome(options=self.options)
+                driver.get(DAY_PATH)
+                wait = WebDriverWait(driver, timeout=30)  # Prevent session exception
+                # Title area class name
+                content = wait.until(EC.presence_of_element_located((By.ID, "content")))
+                title_info = content.find_elements(By.CLASS_NAME, "ContentTitle__title_area--x24vt")
+                for e in title_info:
+                    link.append(e.get_attribute("href"))
 
-        self.links.append(link)
-        return link
+                self.links.append(link)
 
     def get_links(self):
         return self.links
