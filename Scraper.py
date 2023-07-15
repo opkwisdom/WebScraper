@@ -47,10 +47,13 @@ class WebtoonScraper:
             raise ScrapeCheck("You already scrape the links!")
         else:
             days = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
+            print(f"{'|||||  *** Scrape Links ***  |||||':^40}")
 
             for day in days:
-                print("-"*32)
-                print(f"|||||  processing {day}...  |||||")
+                start = time.time()
+
+                print("|" + "-"*38 + "|")
+                print(f"{'|||||  * processing ' + day + '... *  |||||':^40}")
                 DAY_PATH = self.base_path + "?tab=" + day
                 link = []
 
@@ -64,81 +67,89 @@ class WebtoonScraper:
                     link.append(e.get_attribute("href"))
 
                 self.links.append(link)
+                end = time.time()
+                print(f"Elapsed time: {end - start:.2f}sec")
+            self.is_scraped = True
 
     def get_links(self):
         return self.links
 
-    def make_raw_database(self):
+    def create_raw_database(self):
+
+        # create a rank db
+        rank_db = self.create_a_rank_database()
+
         n = len(self.links)
         count = 0
 
-        driver = self.driver
-        WebDriverWait(driver, timeout=10)
-
-        for link in self.links:
-            start = time.clock()
-            count += 1
-            print(f'-*10 {count}/{n} -*10')
-
-            driver.get(link)
-
-            driver.quit()
-            end = time.clock()
-            print(f'Scrapping time: {end - start}s')
-
     def __len__(self):
-        return len(self.links)
+        size = [len(links) for links in self.links]
+        return size
 
-    def sorted_database(self):
-        days = ["?tab=mon", "?tab=tue", "?tab=wed", "?tab=thu", "?tab=fri", "?tab=sat", "?tab=sun"]
-        DAYS_PATH = [(path + day) for path, day in zip([self.base_path] * 7, days)]
-
-        driver = self.driver
-        WebDriverWait(driver, timeout=200)
-
-        famous = driver.find_elements(By.XPATH, "//*[@id='content']/div[1]/div/div[2]/button[1]")
-        view = driver.find_elements(By.XPATH, "//*[@id='content']/div[1]/div/div[2]/button[3]")
-        rate = driver.find_elements(By.XPATH, "//*[@id='content']/div[1]/div/div[2]/button[4]")
-
-        link_by_method = []
-        method = [famous, view, rate]
-
-        driver.close()
+    def create_a_rank_database(self):
+        days = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
 
         rank_database = pd.DataFrame()
+        print(f"{'|||||  *** Create a rank database ***  |||||':^50}")
 
-        for j, PATH in enumerate(DAYS_PATH):
-            print(f"----------{j}/7----------")
+        for day in days:
             start = time.time()
-            for sort in method:
-                driver = self.driver
-                WebDriverWait(driver, timeout=200)
-                driver.get(PATH)
 
-                sort.click()
-                link = []
+            pop_link = []
+            view_link = []
+            rate_link = []
 
-                Content = driver.find_element(By.ID, "content")
+            pop_db = pd.DataFrame()
+            view_db = pd.DataFrame()
+            rate_db = pd.DataFrame()
 
-                Link_Info = Content.find_elements(By.CLASS_NAME, "ContentTitle__title_area--x24vt")
-                for i, link in enumerate(Link_Info):
-                    link.append((i + 1, link.get_attribute("href")))
-                link_by_method.append(link)
+            print("|" + "-"*48 + "|")
+            print(f"{'|||||  * processing ' + day + '... *  |||||':^50}")
+            DAY_PATH = self.base_path + "?tab=" + day
 
-            sorted_by_pop = pd.DataFrame(link_by_method[0],
+            driver = webdriver.Chrome(options=self.options)
+            driver.get(DAY_PATH)
+            wait = WebDriverWait(driver, timeout=30)
+
+            # rank by pop
+            pop = wait.until(EC.presence_of_element_located((By.XPATH,
+                                                                "//*[@id='content']/div[1]/div/div[2]/button[1]")))
+            pop.click()
+            content = driver.find_element(By.ID, "content")
+            Link_Info = content.find_elements(By.CLASS_NAME, "ContentTitle__title_area--x24vt")
+            for i, link in enumerate(Link_Info):
+                pop_link.append((i + 1, link.get_attribute("href")))
+
+            # rank by view
+            view = wait.until(EC.presence_of_element_located((By.XPATH,
+                                                             "//*[@id='content']/div[1]/div/div[2]/button[3]")))
+            view.click()
+            content = driver.find_element(By.ID, "content")
+            Link_Info = content.find_elements(By.CLASS_NAME, "ContentTitle__title_area--x24vt")
+            for i, link in enumerate(Link_Info):
+                view_link.append((i + 1, link.get_attribute("href")))
+
+            # rank by rate
+            rate = wait.until(EC.presence_of_element_located((By.XPATH,
+                                                             "//*[@id='content']/div[1]/div/div[2]/button[4]")))
+            rate.click()
+            content = driver.find_element(By.ID, "content")
+            Link_Info = content.find_elements(By.CLASS_NAME, "ContentTitle__title_area--x24vt")
+            for i, link in enumerate(Link_Info):
+                rate_link.append((i + 1, link.get_attribute("href")))
+
+            sorted_by_pop = pd.DataFrame(pop_link,
                                          columns=["Popularity", "Link"])
-            sorted_by_view = pd.DataFrame(link_by_method[1],
+            sorted_by_view = pd.DataFrame(view_link,
                                           columns=["View", "Link"])
-            sorted_by_rate = pd.DataFrame(link_by_method[2],
+            sorted_by_rate = pd.DataFrame(rate_link,
                                           columns=["Rate", "Link"])
             merged = pd.merge(sorted_by_pop, sorted_by_view, on="Link")
             merged = pd.merge(merged, sorted_by_rate, on="Link")
 
-            rank_database = pd.concat(rank_database, merged)
+            rank_database = pd.concat([rank_database, merged])
             end = time.time()
             print(f"Elapsed time: {end - start:.2f}s")
 
         return rank_database
-
-
 
