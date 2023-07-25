@@ -2,11 +2,11 @@
 WebtoonScraper Class
 
 method
-1. scrap_links(self, day) : scrap the links for the day of the week
+1. scrape_links(self, day) : scrape the links for the day of the week
                             parameter day must be in one of the following formats
                             ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
 2. get_links(self) : get the scraped links of the class instance
-3. make_raw_database(self) : create a database based on the links, and return the pandas csv object.
+3. create_raw_database(self) : create a database based on the links, and return the pandas csv object.
 """
 
 from selenium import webdriver
@@ -17,6 +17,7 @@ from selenium.webdriver.support import expected_conditions as EC
 import os
 import time
 import pandas as pd
+import numpy as np
 
 
 class ScrapeCheck(Exception):
@@ -49,6 +50,7 @@ class WebtoonScraper:
             days = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
             print(f"{'|||||  *** Scrape Links ***  |||||':^40}")
 
+            total_time = 0
             for day in days:
                 start = time.time()
 
@@ -69,13 +71,21 @@ class WebtoonScraper:
                 self.links.append(link)
                 end = time.time()
                 print(f"Elapsed time: {end - start:.2f}sec")
+                total_time += round(end - start, 2)
             self.is_scraped = True
+
+            self.links = sum(self.links, [])
+            # remove duplicate rows
+            self.links = list(set(self.links))
+
+            print("|" + "-" * 38 + "|")
+            print(f"Total elapsed time: {total_time:.2f}s")
+            print()
 
     def get_links(self):
         return self.links
 
     def create_raw_database(self):
-
         # create a rank db
         rank_db = self.create_a_rank_database()
 
@@ -84,7 +94,7 @@ class WebtoonScraper:
 
     def __len__(self):
         size = [len(links) for links in self.links]
-        return size
+        return sum(size)
 
     def create_a_rank_database(self):
         days = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
@@ -92,6 +102,7 @@ class WebtoonScraper:
         rank_database = pd.DataFrame()
         print(f"{'|||||  *** Create a rank database ***  |||||':^50}")
 
+        total_time = 0
         for day in days:
             start = time.time()
 
@@ -109,12 +120,14 @@ class WebtoonScraper:
 
             driver = webdriver.Chrome(options=self.options)
             driver.get(DAY_PATH)
-            wait = WebDriverWait(driver, timeout=30)
+            wait = WebDriverWait(driver, timeout=40)
 
             # rank by pop
             pop = wait.until(EC.presence_of_element_located((By.XPATH,
                                                                 "//*[@id='content']/div[1]/div/div[2]/button[1]")))
             pop.click()
+            # WebDriverWait until loading the page
+            time.sleep(1)
             content = driver.find_element(By.ID, "content")
             Link_Info = content.find_elements(By.CLASS_NAME, "ContentTitle__title_area--x24vt")
             for i, link in enumerate(Link_Info):
@@ -124,6 +137,8 @@ class WebtoonScraper:
             view = wait.until(EC.presence_of_element_located((By.XPATH,
                                                              "//*[@id='content']/div[1]/div/div[2]/button[3]")))
             view.click()
+            # WebDriverWait until loading the page
+            time.sleep(1)
             content = driver.find_element(By.ID, "content")
             Link_Info = content.find_elements(By.CLASS_NAME, "ContentTitle__title_area--x24vt")
             for i, link in enumerate(Link_Info):
@@ -133,6 +148,8 @@ class WebtoonScraper:
             rate = wait.until(EC.presence_of_element_located((By.XPATH,
                                                              "//*[@id='content']/div[1]/div/div[2]/button[4]")))
             rate.click()
+            # WebDriverWait until loading the page
+            time.sleep(1)
             content = driver.find_element(By.ID, "content")
             Link_Info = content.find_elements(By.CLASS_NAME, "ContentTitle__title_area--x24vt")
             for i, link in enumerate(Link_Info):
@@ -150,6 +167,13 @@ class WebtoonScraper:
             rank_database = pd.concat([rank_database, merged])
             end = time.time()
             print(f"Elapsed time: {end - start:.2f}s")
+            print(f"size1: {sorted_by_pop.shape} / size2: {sorted_by_view.shape} / size3: {sorted_by_rate.shape}")
 
+            total_time += round(end - start, 2)
+        # drop duplicate rows
+        rank_database = rank_database.drop_duplicates(subset=["Link"])
+        print("|" + "-"*48 + "|")
+        print(f"Total Elapsed time: {total_time:.2f}s")
+        print()
         return rank_database
 
