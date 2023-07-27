@@ -6,7 +6,9 @@ method
                             parameter day must be in one of the following formats
                             ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
 2. get_links(self) : get the scraped links of the class instance
-3. create_raw_database(self) : create a database based on the links, and return the pandas csv object.
+3. create_database(self) : create database from sub-method 3.1 & 3.2
+    3.1. create_feature_database: extract feature information about each webtoon and make sub database
+    3.2. create_rank_database: extract rank information and make sub database
 """
 
 from selenium import webdriver
@@ -20,6 +22,7 @@ import pandas as pd
 import numpy as np
 
 
+# Exception class
 class ScrapeCheck(Exception):
     pass
 
@@ -39,6 +42,9 @@ class WebtoonScraper:
         self.options.add_argument("headless")
         self.options.add_argument('--window-size=1920,1080')
         self.options.add_argument('--disable-blink-features=AutomationControlled')
+        # set User-Agent for preventing access blocked
+        self.options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64)" +
+                                  "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/92.0.4515.131 Safari/537.36")
         # prevent webdriver from closing immediately
         self.options.add_experimental_option("detach", True)
 
@@ -70,7 +76,7 @@ class WebtoonScraper:
 
                 self.links.append(link)
                 end = time.time()
-                print(f"Elapsed time: {end - start:.2f}sec")
+                print(f"Elapsed time: {end - start:.2f}sec / length: {len(link)}")
                 total_time += round(end - start, 2)
             self.is_scraped = True
 
@@ -85,22 +91,101 @@ class WebtoonScraper:
     def get_links(self):
         return self.links
 
-    def create_raw_database(self):
-        # create a rank db
-        rank_db = self.create_a_rank_database()
+    def set_links(self, links):
+        self.links = links
 
-        n = len(self.links)
-        count = 0
+    def create_database(self):
+        # create rank db
+        rank_db = self.create_rank_database()
+        # create feature db
+        feature_db = self.create_feature_database()
+
+        full_db = pd.merge(feature_db, rank_db, on="Link")
+        return full_db
 
     def __len__(self):
         size = [len(links) for links in self.links]
         return sum(size)
 
-    def create_a_rank_database(self):
+    # extract feature information about each webtoon and make sub database
+    def create_feature_database(self):
+        total_time = 0
+
+        links = self.links
+        size = len(links)
+
+        features = []
+
+        print(f"{'|||||  *** Create a feature database ***  |||||':^50}")
+        print()
+        for i, link in enumerate(links):
+            start = time.time()
+
+            driver = webdriver.Chrome(options=self.options)
+            driver.get(link)
+            # Wait up to 10 seconds for the webpage to load
+            driver.implicitly_wait(10)
+
+            print(f"{'|||||  * Process: ' + str(i+1) + '/' + str(size) + ' *  |||||':^30}")
+
+            # Title
+            title = driver.find_elements(By.CLASS_NAME, "EpisodeListInfo__title--mYLjC")[0].text
+
+            # Writer, Painter
+            author_info = driver.find_elements(By.CLASS_NAME, "ContentMetaInfo__category--WwrCp")[0].text.split("\n")[0]
+            if author_info == "글/그림":
+                writer = painter = driver.find_elements(By.CLASS_NAME, "ContentMetaInfo__link--xTtO6")[0].text
+            else:
+                writer = driver.find_elements(By.CLASS_NAME, "ContentMetaInfo__link--xTtO6")[0].text
+                painter = driver.find_elements(By.CLASS_NAME, "ContentMetaInfo__link--xTtO6")[1].text
+
+            # Serial Date, Serial Rate
+            serial_info = driver.find_elements(By.CLASS_NAME, "ContentMetaInfo__info_item--utGrf")[0].text
+            serial_info = serial_info.split('∙')
+            serial_info = [item.replace('\n', '') for item in serial_info]
+
+            serial_date = serial_info[:-1]
+            serial_rate = serial_info[-1]
+
+            # Tags, Genre
+            tags_info = driver.find_elements(By.CLASS_NAME, "TagGroup__tag--xu0OH")
+            tags = [i.text for i in tags_info]
+            genre = tags[0]
+
+            # Likes
+            likes = driver.find_elements(By.CLASS_NAME, "EpisodeListUser__count--fNEWK")[0].text
+
+            # Summary
+            summary = driver.find_elements(By.CLASS_NAME, "EpisodeListInfo__summary--Jd1WG")[0].text
+
+            # Total Publishes
+            total_publishes = driver.find_elements(By.CLASS_NAME, "EpisodeListView__count--fTMc5")[0].text
+            total_publishes = total_publishes.split()[1]
+
+            features.append([link, title, writer, painter, serial_date, serial_rate, genre,
+                             tags, likes, total_publishes, summary])
+            driver.quit()
+
+            end = time.time()
+            print(f"Elapsed time: {end - start:.2f}s")
+            total_time += round(end - start, 2)
+
+        feature_database = pd.DataFrame(features,
+                                        columns=["Link", "Title", "Writer", "Painter", "Serial_Date", "Serial_Rate",
+                                                 "Genre", "Tags", "Likes", "Total_Publishes", "Summary"])
+        print("|" + "-" * 48 + "|")
+        print(f"Total Elapsed time: {total_time:.2f}s")
+        print()
+        return feature_database
+
+
+    # extract rank information and make sub database
+    def create_rank_database(self):
         days = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
 
         rank_database = pd.DataFrame()
         print(f"{'|||||  *** Create a rank database ***  |||||':^50}")
+        print()
 
         total_time = 0
         for day in days:
@@ -167,7 +252,7 @@ class WebtoonScraper:
             rank_database = pd.concat([rank_database, merged])
             end = time.time()
             print(f"Elapsed time: {end - start:.2f}s")
-            print(f"size1: {sorted_by_pop.shape} / size2: {sorted_by_view.shape} / size3: {sorted_by_rate.shape}")
+            print(f"df1 shape: {sorted_by_pop.shape} / df2 shape: {sorted_by_view.shape} / df3 shape: {sorted_by_rate.shape}")
 
             total_time += round(end - start, 2)
         # drop duplicate rows
@@ -176,4 +261,3 @@ class WebtoonScraper:
         print(f"Total Elapsed time: {total_time:.2f}s")
         print()
         return rank_database
-
