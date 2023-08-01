@@ -16,10 +16,12 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.support.wait import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.common.keys import Keys
+from selenium.common.exceptions import NoSuchElementException
 import os
 import time
 import pandas as pd
-import numpy as np
+import pyperclip
 
 
 # Exception class
@@ -39,12 +41,12 @@ class WebtoonScraper:
 
     # set the WebDriver options
     def set_driver_options(self):
-        self.options.add_argument("headless")
+        self.options.add_argument('--headless')
         self.options.add_argument('--window-size=1920,1080')
         self.options.add_argument('--disable-blink-features=AutomationControlled')
         # set User-Agent for preventing access blocked
         self.options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64)" +
-                                  "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/92.0.4515.131 Safari/537.36")
+                                  "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36")
         # prevent webdriver from closing immediately
         self.options.add_experimental_option("detach", True)
 
@@ -121,12 +123,49 @@ class WebtoonScraper:
         for i, link in enumerate(links):
             start = time.time()
 
-            driver = webdriver.Chrome(options=self.options)
+            options = self.options
+            options.headless = True
+            driver = webdriver.Chrome(options=options)
             driver.get(link)
             # Wait up to 10 seconds for the webpage to load
             driver.implicitly_wait(10)
 
-            print(f"{'|||||  * Process: ' + str(i+1) + '/' + str(size) + ' *  |||||':^30}")
+            print(f"{'|||||  * Process: Webtoon ' + str(i+1) + 'th/' + str(size) + 'th *  |||||':^50}")
+
+            # In case of adult authentication
+            if driver.title == '네이버 : 로그인':
+                driver.quit()
+
+                options.headless = False
+                driver = webdriver.Chrome(options=options)
+                # account for adult authentication
+                driver.get(link)
+                driver.implicitly_wait(10)
+
+                with open("Authentication.txt", "r") as f:
+                    user_info = f.readlines()
+                user_info = [info.strip() for info in user_info]
+
+                ID = user_info[0]
+                PW = user_info[1]
+
+                id_input = driver.find_element(By.ID, "id")
+                id_input.click()
+                pyperclip.copy(ID)  # copy & paste for auto-input protection character bypass
+                id_input.send_keys(Keys.CONTROL, 'v')
+                time.sleep(1)
+                pw_input = driver.find_element(By.ID, "pw")
+                pw_input.click()
+                pyperclip.copy(PW)  # copy & paste for auto-input protection character bypass
+                pw_input.send_keys(Keys.CONTROL, 'v')
+                time.sleep(1)
+
+                login_btn = driver.find_element(By.ID, "log.login")
+                login_btn.click()
+                time.sleep(1)
+
+                dont_save = WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.ID, "new.dontsave")))
+                dont_save.click()
 
             # Title
             title = driver.find_elements(By.CLASS_NAME, "EpisodeListInfo__title--mYLjC")[0].text
@@ -167,14 +206,16 @@ class WebtoonScraper:
             driver.quit()
 
             end = time.time()
+            print(f"Current scraped webtoon: {title}")
             print(f"Elapsed time: {end - start:.2f}s")
             total_time += round(end - start, 2)
+            print(f"Total Elapsed_time: {total_time:.2f}s")
+            print("|" + "-" * 48 + "|")
+            print()
 
         feature_database = pd.DataFrame(features,
                                         columns=["Link", "Title", "Writer", "Painter", "Serial_Date", "Serial_Rate",
                                                  "Genre", "Tags", "Likes", "Total_Publishes", "Summary"])
-        print("|" + "-" * 48 + "|")
-        print(f"Total Elapsed time: {total_time:.2f}s")
         print()
         return feature_database
 
