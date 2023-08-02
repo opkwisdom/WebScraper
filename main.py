@@ -2,6 +2,7 @@ from Scraper import WebtoonScraper
 import os
 import time
 import pandas as pd
+import numpy as np
 
 BASE_PATH = "https://comic.naver.com/webtoon"
 days = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
@@ -12,12 +13,19 @@ scraper.set_driver_options()
 # scrape the links
 # scraper.scrape_links()
 
-# links = scraper.get_links()
-# for i, link in enumerate(links):
-# print(f"{days[i]} / {len(links[i])}: {link}")
-# print(len(scraper))
+# make webtoon db
+webtoon_db = scraper.create_database()
+webtoon_db.to_csv('webtoon_db.csv', index=False)
 
-# create a rank database
-rank_db = scraper.create_a_rank_database()
-print(rank_db)
+df = pd.read_csv('WebScraper/webtoon_db.csv')
+print(df)
+print(df.info())
+
+# links = scraper.get_links()
+# with open("links.txt", "w") as f:
+#     for link in links:
+#         f.write(link + "\n")
+# print(links)
+# print(len(links))
+
 
