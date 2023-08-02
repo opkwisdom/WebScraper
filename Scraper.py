@@ -2,13 +2,14 @@
 WebtoonScraper Class
 
 method
-1. scrape_links(self, day) : scrape the links for the day of the week
-                            parameter day must be in one of the following formats
-                            ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
+1. scrape_links(self) : scrape the links for the day of the week
+                        parameter day must be in one of the following formats
+                        ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
 2. get_links(self) : get the scraped links of the class instance
 3. create_database(self) : create database from sub-method 3.1 & 3.2
     3.1. create_feature_database: extract feature information about each webtoon and make sub database
     3.2. create_rank_database: extract rank information and make sub database
+4. set_driver_options(self) : set the WebDriver options
 """
 
 from selenium import webdriver
@@ -97,12 +98,17 @@ class WebtoonScraper:
         self.links = links
 
     def create_database(self):
-        # create rank db
-        rank_db = self.create_rank_database()
-        # create feature db
-        feature_db = self.create_feature_database()
+        if os.path.exists('WebScraper/rank_db.csv') and os.path.exists('WebScraper/feature_db.csv'):
+            rank_db = pd.read_csv('WebScraper/rank_db.csv')
+            feature_db = pd.read_csv('WebScraper/feature_db.csv')
+            full_db = pd.merge(feature_db, rank_db, on="Link")
+        else:
+            # create rank db
+            rank_db = self.create_rank_database()
+            # create feature db
+            feature_db = self.create_feature_database()
 
-        full_db = pd.merge(feature_db, rank_db, on="Link")
+            full_db = pd.merge(feature_db, rank_db, on="Link")
         return full_db
 
     def __len__(self):
@@ -142,7 +148,7 @@ class WebtoonScraper:
                 driver.get(link)
                 driver.implicitly_wait(10)
 
-                with open("Authentication.txt", "r") as f:
+                with open("WebScraper/Authentication.txt", "r") as f:
                     user_info = f.readlines()
                 user_info = [info.strip() for info in user_info]
 
@@ -218,7 +224,6 @@ class WebtoonScraper:
                                                  "Genre", "Tags", "Likes", "Total_Publishes", "Summary"])
         print()
         return feature_database
-
 
     # extract rank information and make sub database
     def create_rank_database(self):
